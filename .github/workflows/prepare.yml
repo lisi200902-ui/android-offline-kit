@@ -1,0 +1,97 @@
+
+name: Prepare Android Offline Kit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout kit repository
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: |
+          sdkmanager \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "platform-tools"
+
+      - name: Download official hand tracking sample
+        run: |
+          mkdir -p "$RUNNER_TEMP/source"
+          curl -fL \
+            https://github.com/google-ai-edge/mediapipe-samples/archive/refs/heads/main.zip \
+            -o "$RUNNER_TEMP/sample.zip"
+          unzip -q "$RUNNER_TEMP/sample.zip" \
+            -d "$RUNNER_TEMP/source"
+
+      - name: Build sample and download model
+        run: |
+          cd "$RUNNER_TEMP/source/mediapipe-samples-main/examples/hand_landmarker/android"
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Assemble offline kit
+        run: |
+          KIT="$RUNNER_TEMP/offline-kit"
+          mkdir -p "$KIT/project" "$KIT/sdk" "$KIT/gradle"
+
+          cp -a \
+            "$RUNNER_TEMP/source/mediapipe-samples-main/examples/hand_landmarker/android/." \
+            "$KIT/project/"
+
+          cp -a "$ANDROID_HOME/platforms" "$KIT/sdk/"
+          cp -a "$ANDROID_HOME/build-tools" "$KIT/sdk/"
+          cp -a "$ANDROID_HOME/platform-tools" "$KIT/sdk/"
+          cp -a "$ANDROID_HOME/licenses" "$KIT/sdk/"
+
+          mkdir -p "$KIT/gradle/caches" "$KIT/gradle/wrapper"
+          cp -a "$HOME/.gradle/caches/." "$KIT/gradle/caches/"
+          cp -a "$HOME/.gradle/wrapper/dists/." \
+            "$KIT/gradle/wrapper/dists/"
+
+          mkdir -p "$KIT/output"
+          cp "$RUNNER_TEMP/source/mediapipe-samples-main/examples/hand_landmarker/android/app/build/outputs/apk/debug/app-debug.apk" \
+            "$KIT/output/"
+
+          cat > "$KIT/README-OFFLINE.txt" <<'EOF'
+          Offline Android Hand Landmarker Kit
+          Target: x86_64 Linux
+          JDK: 17
+          Android compile SDK: 34
+
+          Set ANDROID_HOME to the extracted sdk directory.
+          Set GRADLE_USER_HOME to the extracted gradle directory.
+          Set sdk.dir in project/local.properties.
+          Build with ./gradlew --offline assembleDebug.
+
+          This cache is prepared for the included project and its
+          resolved dependencies. New dependencies may be unavailable
+          offline. Check that the model .task file exists in assets.
+          EOF
+
+          tar -czf "$RUNNER_TEMP/android-offline-kit.tar.gz" \
+            -C "$RUNNER_TEMP" offline-kit
+
+      - name: Upload offline kit
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-offline-kit
+          path: ${{ runner.temp }}/android-offline-kit.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
