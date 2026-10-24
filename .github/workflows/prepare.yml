@@ -1,4 +1,6 @@
-
+permissions:
+  contents: write
+  
 name: Prepare Android Offline Kit
 
 on:
@@ -96,3 +98,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
+          
+      - name: Publish offline kit to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create offline-kit-v1 \
+            "$RUNNER_TEMP/android-offline-kit.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Android Offline Kit" \
+            --notes "Offline Android development kit"
