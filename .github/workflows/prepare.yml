@@ -1,13 +1,11 @@
-permissions:
-  contents: write
-  
+ 
 name: Prepare Android Offline Kit
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   prepare:
